@@ -8,8 +8,8 @@ variable "environment" {
   type        = string
 }
 
-variable "version" {
-  description = "Version label for blue/green deployment"
+variable "deployment_slot" {
+  description = "Version label for blue/green deployment (Blue or Green)"
   type        = string
   default     = "Blue"
 }

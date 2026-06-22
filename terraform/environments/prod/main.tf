@@ -34,7 +34,7 @@ module "lambda_blue" {
   source            = "../../modules/lambda"
   function_name     = "${var.environment_name}-hello-function-blue"
   environment       = var.environment_name
-  version           = "Blue"
+  deployment_slot   = "Blue"
   enable_blue_green = false
   tags              = merge(local.common_tags, { Slot = "blue" })
 }
@@ -44,7 +44,7 @@ module "lambda_green" {
   source            = "../../modules/lambda"
   function_name     = "${var.environment_name}-hello-function-green"
   environment       = var.environment_name
-  version           = "Green"
+  deployment_slot   = "Green"
   enable_blue_green = false
   tags              = merge(local.common_tags, { Slot = "green" })
 }

@@ -31,11 +31,11 @@ locals {
 }
 
 module "lambda" {
-  source        = "../../modules/lambda"
-  function_name = "${var.environment_name}-hello-function"
-  environment   = var.environment_name
-  version       = "Blue"
-  tags          = local.common_tags
+  source           = "../../modules/lambda"
+  function_name    = "${var.environment_name}-hello-function"
+  environment      = var.environment_name
+  deployment_slot  = "Blue"
+  tags             = local.common_tags
 }
 
 module "api_gateway" {

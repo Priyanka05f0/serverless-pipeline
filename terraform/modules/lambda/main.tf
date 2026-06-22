@@ -35,7 +35,7 @@ resource "aws_lambda_function" "hello" {
   environment {
     variables = {
       ENVIRONMENT = var.environment
-      VERSION     = var.version
+      VERSION     = var.deployment_slot
     }
   }
 
