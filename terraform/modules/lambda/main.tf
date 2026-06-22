@@ -14,7 +14,7 @@ terraform {
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.root}/../../lambda-src/hello_function"
-  output_path = "${path.module}/lambda_function.zip"
+  output_path = "${path.root}/../../lambda-src/lambda_function.zip"
 }
 
 resource "aws_iam_role" "lambda_exec" {
