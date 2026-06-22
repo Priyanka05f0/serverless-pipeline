@@ -11,10 +11,11 @@ terraform {
   }
 }
 
-data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.root}/../../lambda-src/hello_function"
-  output_path = "${path.root}/../../lambda-src/lambda_function.zip"
+# The zip is pre-built by CI in the repo root as lambda_function.zip
+# path.root = terraform/environments/dev (or staging/prod)
+# So ../../.. gets us to repo root
+locals {
+  lambda_zip_path = "${path.root}/../../../lambda_function.zip"
 }
 
 resource "aws_iam_role" "lambda_exec" {
@@ -38,12 +39,12 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 }
 
 resource "aws_lambda_function" "hello" {
-  filename         = data.archive_file.lambda_zip.output_path
+  filename         = local.lambda_zip_path
   function_name    = var.function_name
   role             = aws_iam_role.lambda_exec.arn
   handler          = "app.lambda_handler"
   runtime          = "python3.11"
-  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  source_code_hash = filebase64sha256(local.lambda_zip_path)
 
   environment {
     variables = {
