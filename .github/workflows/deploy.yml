@@ -12,7 +12,7 @@ env:
   TF_VERSION: "1.6.6"
 
 jobs:
-  # ─── DEV: auto-deploy on any branch push ────────────────────────────
+  # ─── DEV ────────────────────────────────────────────────────────────
   deploy-dev:
     name: Deploy to DEV
     runs-on: ubuntu-22.04
@@ -31,10 +31,9 @@ jobs:
 
       - name: Install Terraform
         run: |
-          sudo apt-get update -y && sudo apt-get install -y gnupg software-properties-common curl unzip
-          curl -fsSL https://releases.hashicorp.com/terraform/${{ env.TF_VERSION }}/terraform_${{ env.TF_VERSION }}_linux_amd64.zip -o terraform.zip
-          unzip terraform.zip
-          sudo mv terraform /usr/local/bin/terraform
+          curl -fsSL "https://releases.hashicorp.com/terraform/${{ env.TF_VERSION }}/terraform_${{ env.TF_VERSION }}_linux_amd64.zip" -o terraform.zip
+          unzip -o terraform.zip
+          sudo mv -f terraform /usr/local/bin/terraform
           terraform version
 
       - name: Terraform Init (dev)
@@ -61,13 +60,12 @@ jobs:
         run: |
           DEV_URL=$(terraform -chdir=./terraform/environments/dev output -raw invoke_url 2>/dev/null || echo "")
           if [ -n "$DEV_URL" ]; then
-            echo "Testing $DEV_URL"
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$DEV_URL")
             echo "HTTP Status: $HTTP_CODE"
-            [ "$HTTP_CODE" = "200" ] && echo "✅ DEV endpoint OK" || echo "⚠️ DEV endpoint returned $HTTP_CODE"
+            [ "$HTTP_CODE" = "200" ] && echo "✅ DEV endpoint OK" || echo "⚠️ DEV returned $HTTP_CODE"
           fi
 
-  # ─── STAGING: only on main branch, requires manual approval ─────────
+  # ─── STAGING ────────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to STAGING
     runs-on: ubuntu-22.04
@@ -88,9 +86,9 @@ jobs:
 
       - name: Install Terraform
         run: |
-          curl -fsSL https://releases.hashicorp.com/terraform/${{ env.TF_VERSION }}/terraform_${{ env.TF_VERSION }}_linux_amd64.zip -o terraform.zip
-          unzip terraform.zip
-          sudo mv terraform /usr/local/bin/terraform
+          curl -fsSL "https://releases.hashicorp.com/terraform/${{ env.TF_VERSION }}/terraform_${{ env.TF_VERSION }}_linux_amd64.zip" -o terraform.zip
+          unzip -o terraform.zip
+          sudo mv -f terraform /usr/local/bin/terraform
           terraform version
 
       - name: Terraform Init (staging)
@@ -117,13 +115,12 @@ jobs:
         run: |
           STAGING_URL=$(terraform -chdir=./terraform/environments/staging output -raw invoke_url 2>/dev/null || echo "")
           if [ -n "$STAGING_URL" ]; then
-            echo "Testing $STAGING_URL"
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$STAGING_URL")
             echo "HTTP Status: $HTTP_CODE"
-            [ "$HTTP_CODE" = "200" ] && echo "✅ STAGING endpoint OK" || echo "⚠️ STAGING returned $HTTP_CODE"
+            [ "$HTTP_CODE" = "200" ] && echo "✅ STAGING OK" || echo "⚠️ STAGING returned $HTTP_CODE"
           fi
 
-  # ─── PROD: blue/green deployment, requires manual approval ──────────
+  # ─── PROD (Blue/Green) ───────────────────────────────────────────────
   deploy-prod:
     name: Deploy to PROD (Blue/Green)
     runs-on: ubuntu-22.04
@@ -144,9 +141,9 @@ jobs:
 
       - name: Install Terraform
         run: |
-          curl -fsSL https://releases.hashicorp.com/terraform/${{ env.TF_VERSION }}/terraform_${{ env.TF_VERSION }}_linux_amd64.zip -o terraform.zip
-          unzip terraform.zip
-          sudo mv terraform /usr/local/bin/terraform
+          curl -fsSL "https://releases.hashicorp.com/terraform/${{ env.TF_VERSION }}/terraform_${{ env.TF_VERSION }}_linux_amd64.zip" -o terraform.zip
+          unzip -o terraform.zip
+          sudo mv -f terraform /usr/local/bin/terraform
           terraform version
 
       - name: Terraform Init (prod)
@@ -161,11 +158,10 @@ jobs:
         id: slot
         run: |
           CURRENT=$(terraform -chdir=./terraform/environments/prod output -raw active_slot 2>/dev/null || echo "blue")
-          echo "Current active slot: $CURRENT"
           if [ "$CURRENT" = "blue" ]; then NEXT="green"; else NEXT="blue"; fi
           echo "next_slot=$NEXT" >> $GITHUB_OUTPUT
           echo "current_slot=$CURRENT" >> $GITHUB_OUTPUT
-          echo "Deploying to: $NEXT slot"
+          echo "Deploying to: $NEXT slot (current: $CURRENT)"
 
       - name: Terraform Plan (prod)
         run: |
@@ -180,9 +176,8 @@ jobs:
           terraform -chdir=./terraform/environments/prod apply \
             -auto-approve tfplan
 
-      - name: Validate and complete blue/green swap
+      - name: Validate blue/green swap
         run: |
-          echo "Validating ${{ steps.slot.outputs.next_slot }} slot..."
           sleep 10
           PROD_URL=$(terraform -chdir=./terraform/environments/prod output -raw invoke_url 2>/dev/null || echo "")
           if [ -n "$PROD_URL" ]; then
