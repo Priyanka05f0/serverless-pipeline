@@ -1,3 +1,16 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
+  }
+}
+
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.root}/../../lambda-src/hello_function"
@@ -57,26 +70,11 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "Lambda function errors > 0 for 5 minutes"
+  alarm_description   = "Lambda errors > 0 for 5 minutes"
 
   dimensions = {
     FunctionName = aws_lambda_function.hello.function_name
   }
 
   tags = var.tags
-}
-
-# Lambda aliases for blue/green (used in prod)
-resource "aws_lambda_alias" "blue" {
-  count            = var.enable_blue_green ? 1 : 0
-  name             = "blue"
-  function_name    = aws_lambda_function.hello.function_name
-  function_version = aws_lambda_function.hello.version
-}
-
-resource "aws_lambda_alias" "green" {
-  count            = var.enable_blue_green ? 1 : 0
-  name             = "green"
-  function_name    = aws_lambda_function.hello.function_name
-  function_version = aws_lambda_function.hello.version
 }

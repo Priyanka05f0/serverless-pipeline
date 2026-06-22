@@ -5,6 +5,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 
   backend "s3" {
@@ -31,25 +35,23 @@ locals {
 
 # Blue Lambda (stable/current)
 module "lambda_blue" {
-  source            = "../../modules/lambda"
-  function_name     = "${var.environment_name}-hello-function-blue"
-  environment       = var.environment_name
-  deployment_slot   = "Blue"
-  enable_blue_green = false
-  tags              = merge(local.common_tags, { Slot = "blue" })
+  source          = "../../modules/lambda"
+  function_name   = "${var.environment_name}-hello-function-blue"
+  environment     = var.environment_name
+  deployment_slot = "Blue"
+  tags            = merge(local.common_tags, { Slot = "blue" })
 }
 
 # Green Lambda (new deployment target)
 module "lambda_green" {
-  source            = "../../modules/lambda"
-  function_name     = "${var.environment_name}-hello-function-green"
-  environment       = var.environment_name
-  deployment_slot   = "Green"
-  enable_blue_green = false
-  tags              = merge(local.common_tags, { Slot = "green" })
+  source          = "../../modules/lambda"
+  function_name   = "${var.environment_name}-hello-function-green"
+  environment     = var.environment_name
+  deployment_slot = "Green"
+  tags            = merge(local.common_tags, { Slot = "green" })
 }
 
-# API Gateway points to active slot (controlled by var.active_slot)
+# API Gateway points to active slot
 module "api_gateway" {
   source               = "../../modules/api-gateway"
   api_name             = "${var.environment_name}-hello-api"

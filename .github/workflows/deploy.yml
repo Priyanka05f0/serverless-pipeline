@@ -9,13 +9,13 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  TF_VERSION: "1.6.0"
+  TF_VERSION: "1.6.6"
 
 jobs:
   # ─── DEV: auto-deploy on any branch push ────────────────────────────
   deploy-dev:
     name: Deploy to DEV
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     environment: dev
 
     steps:
@@ -29,10 +29,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+      - name: Install Terraform
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y gnupg software-properties-common curl unzip
+          curl -fsSL https://releases.hashicorp.com/terraform/${{ env.TF_VERSION }}/terraform_${{ env.TF_VERSION }}_linux_amd64.zip -o terraform.zip
+          unzip terraform.zip
+          sudo mv terraform /usr/local/bin/terraform
+          terraform version
 
       - name: Terraform Init (dev)
         run: |
@@ -59,16 +62,18 @@ jobs:
           DEV_URL=$(terraform -chdir=./terraform/environments/dev output -raw invoke_url 2>/dev/null || echo "")
           if [ -n "$DEV_URL" ]; then
             echo "Testing $DEV_URL"
-            curl -s -o /dev/null -w "%{http_code}" "$DEV_URL" | grep -q "200" && echo "✅ DEV endpoint OK" || echo "⚠️ DEV endpoint check failed"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$DEV_URL")
+            echo "HTTP Status: $HTTP_CODE"
+            [ "$HTTP_CODE" = "200" ] && echo "✅ DEV endpoint OK" || echo "⚠️ DEV endpoint returned $HTTP_CODE"
           fi
 
   # ─── STAGING: only on main branch, requires manual approval ─────────
   deploy-staging:
     name: Deploy to STAGING
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: deploy-dev
     if: github.ref == 'refs/heads/main'
-    environment: staging   # GitHub Environment with required reviewers
+    environment: staging
 
     steps:
       - name: Checkout code
@@ -81,10 +86,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+      - name: Install Terraform
+        run: |
+          curl -fsSL https://releases.hashicorp.com/terraform/${{ env.TF_VERSION }}/terraform_${{ env.TF_VERSION }}_linux_amd64.zip -o terraform.zip
+          unzip terraform.zip
+          sudo mv terraform /usr/local/bin/terraform
+          terraform version
 
       - name: Terraform Init (staging)
         run: |
@@ -111,16 +118,18 @@ jobs:
           STAGING_URL=$(terraform -chdir=./terraform/environments/staging output -raw invoke_url 2>/dev/null || echo "")
           if [ -n "$STAGING_URL" ]; then
             echo "Testing $STAGING_URL"
-            curl -s -o /dev/null -w "%{http_code}" "$STAGING_URL" | grep -q "200" && echo "✅ STAGING endpoint OK" || echo "⚠️ STAGING check failed"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$STAGING_URL")
+            echo "HTTP Status: $HTTP_CODE"
+            [ "$HTTP_CODE" = "200" ] && echo "✅ STAGING endpoint OK" || echo "⚠️ STAGING returned $HTTP_CODE"
           fi
 
   # ─── PROD: blue/green deployment, requires manual approval ──────────
   deploy-prod:
     name: Deploy to PROD (Blue/Green)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: deploy-staging
     if: github.ref == 'refs/heads/main'
-    environment: prod   # GitHub Environment with required reviewers
+    environment: prod
 
     steps:
       - name: Checkout code
@@ -133,10 +142,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+      - name: Install Terraform
+        run: |
+          curl -fsSL https://releases.hashicorp.com/terraform/${{ env.TF_VERSION }}/terraform_${{ env.TF_VERSION }}_linux_amd64.zip -o terraform.zip
+          unzip terraform.zip
+          sudo mv terraform /usr/local/bin/terraform
+          terraform version
 
       - name: Terraform Init (prod)
         run: |
@@ -146,24 +157,17 @@ jobs:
             -backend-config="region=${{ env.AWS_REGION }}" \
             -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}"
 
-      # Determine inactive slot (blue/green swap logic)
       - name: Determine deployment slot
         id: slot
         run: |
-          # Get current active slot from Terraform state output
           CURRENT=$(terraform -chdir=./terraform/environments/prod output -raw active_slot 2>/dev/null || echo "blue")
           echo "Current active slot: $CURRENT"
-          if [ "$CURRENT" = "blue" ]; then
-            NEXT="green"
-          else
-            NEXT="blue"
-          fi
+          if [ "$CURRENT" = "blue" ]; then NEXT="green"; else NEXT="blue"; fi
           echo "next_slot=$NEXT" >> $GITHUB_OUTPUT
           echo "current_slot=$CURRENT" >> $GITHUB_OUTPUT
           echo "Deploying to: $NEXT slot"
 
-      # Deploy new version to inactive slot
-      - name: Terraform Plan (prod - new slot)
+      - name: Terraform Plan (prod)
         run: |
           terraform -chdir=./terraform/environments/prod plan \
             -out=tfplan \
@@ -171,13 +175,12 @@ jobs:
             -var="region=${{ env.AWS_REGION }}" \
             -var="active_slot=${{ steps.slot.outputs.next_slot }}"
 
-      - name: Terraform Apply (prod - deploy to new slot)
+      - name: Terraform Apply (prod)
         run: |
           terraform -chdir=./terraform/environments/prod apply \
             -auto-approve tfplan
 
-      # Validate new slot before traffic switch
-      - name: Validate new deployment
+      - name: Validate and complete blue/green swap
         run: |
           echo "Validating ${{ steps.slot.outputs.next_slot }} slot..."
           sleep 10
@@ -185,6 +188,7 @@ jobs:
           if [ -n "$PROD_URL" ]; then
             RESPONSE=$(curl -s "$PROD_URL" -H "x-api-key: ${{ secrets.PROD_API_KEY }}" || echo "{}")
             echo "Response: $RESPONSE"
-            echo "$RESPONSE" | grep -q "Hello from prod" && echo "✅ Validation PASSED" || (echo "❌ Validation FAILED - rolling back"; exit 1)
+            echo "$RESPONSE" | grep -q "Hello from prod" \
+              && echo "✅ Validation PASSED - traffic on ${{ steps.slot.outputs.next_slot }}" \
+              || (echo "❌ Validation FAILED"; exit 1)
           fi
-          echo "✅ Blue/Green swap complete - traffic now on ${{ steps.slot.outputs.next_slot }} slot"

@@ -5,6 +5,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 
   backend "s3" {
@@ -30,11 +34,11 @@ locals {
 }
 
 module "lambda" {
-  source           = "../../modules/lambda"
-  function_name    = "${var.environment_name}-hello-function"
-  environment      = var.environment_name
-  deployment_slot  = "Blue"
-  tags             = local.common_tags
+  source          = "../../modules/lambda"
+  function_name   = "${var.environment_name}-hello-function"
+  environment     = var.environment_name
+  deployment_slot = "Blue"
+  tags            = local.common_tags
 }
 
 module "api_gateway" {
