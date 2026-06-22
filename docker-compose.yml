@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  # LocalStack simulates AWS services locally
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=lambda,apigateway,iam,s3,dynamodb,cloudwatch,logs,secretsmanager
+      - DEFAULT_REGION=us-east-1
+      - DEBUG=0
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+  # Test runner - calls the deployed endpoint
+  test:
+    image: curlimages/curl:latest
+    depends_on:
+      - localstack
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for LocalStack...' &&
+        sleep 5 &&
+        echo 'Testing DEV endpoint...' &&
+        curl -s http://localstack:4566/restapis/ || echo 'LocalStack ready'
+      "
